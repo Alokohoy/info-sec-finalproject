@@ -39,4 +39,4 @@ A small scraper that parses public movie list pages (Wikipedia) and saves struct
 - **RealTimeChat demo**: `https://www.youtube.com/watch?v=slPZRRE8mcc`
 - **Web scraper demo**: `https://www.youtube.com/watch?v=Ah6_ppRCRjo`
 - **Presentation** `https://canva.link/k5wt5yhiivfzwgg`
-- **Peer review**: `https://youtu.be/GGQAGkmMqp0`
+- **Peer review**: `https://youtu.be/GGQAGkmMqp0 2nd https://youtu.be/tXkmvWQc_Fk`
