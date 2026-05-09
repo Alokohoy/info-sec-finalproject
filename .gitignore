@@ -1,0 +1,28 @@
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+*.egg-info/
+dist/
+build/
+
+# Virtualenvs
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs
+.idea/
+*.iml
+
+# Chat app runtime artifacts
+RealTimeChat/chat.db
