@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Movie Scraper → Elasticsearch</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="header">
+        <div>
+          <h1>Movie Scraper → Elasticsearch</h1>
+          <p class="sub">
+            Elasticsearch: <span class="mono">{{ es_url }}</span> · Index:
+            <span class="mono">{{ index_name }}</span>
+          </p>
+        </div>
+      </header>
+
+      <main class="grid">
+        <section class="card">
+          <h2>1) Scrape & Index</h2>
+          <label class="label" for="url">Wikipedia list URL</label>
+          <input id="url" class="input" type="text" value="{{ default_url }}" />
+          <div class="row">
+            <button id="scrape" class="btn primary">Scrape & Index</button>
+            <button id="health" class="btn">Check ES</button>
+          </div>
+          <pre id="scrapeOut" class="out" aria-live="polite"></pre>
+        </section>
+
+        <section class="card">
+          <h2>2) Search</h2>
+          <label class="label" for="q">Query</label>
+          <div class="row">
+            <input id="q" class="input" type="text" placeholder="e.g. Dune" />
+            <button id="search" class="btn primary">Search</button>
+          </div>
+          <div id="results" class="results"></div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <p class="muted">
+          Demo UI. Data source: Wikipedia list pages. Not a production crawler.
+        </p>
+      </footer>
+    </div>
+
+    <script>
+      const scrapeBtn = document.getElementById("scrape");
+      const healthBtn = document.getElementById("health");
+      const searchBtn = document.getElementById("search");
+      const urlEl = document.getElementById("url");
+      const qEl = document.getElementById("q");
+      const scrapeOut = document.getElementById("scrapeOut");
+      const resultsEl = document.getElementById("results");
+
+      function setOut(el, obj) {
+        el.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+      }
+
+      async function checkES() {
+        try {
+          const r = await fetch("/api/es-info");
+          const data = await r.json().catch(() => ({}));
+          setOut(scrapeOut, r.ok ? data : { status: r.status, ...data });
+        } catch (e) {
+          setOut(scrapeOut, String(e));
+        }
+      }
+
+      healthBtn.addEventListener("click", checkES);
+
+      scrapeBtn.addEventListener("click", async () => {
+        scrapeBtn.disabled = true;
+        setOut(scrapeOut, "Working…");
+        try {
+          const r = await fetch("/api/scrape-and-index", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: urlEl.value }),
+          });
+          const data = await r.json().catch(() => ({}));
+          setOut(scrapeOut, r.ok ? data : { status: r.status, ...data });
+        } catch (e) {
+          setOut(scrapeOut, String(e));
+        } finally {
+          scrapeBtn.disabled = false;
+        }
+      });
+
+      function renderResults(items) {
+        resultsEl.innerHTML = "";
+        if (!items.length) {
+          const div = document.createElement("div");
+          div.className = "empty";
+          div.textContent = "No results.";
+          resultsEl.appendChild(div);
+          return;
+        }
+        items.forEach((it) => {
+          const card = document.createElement("div");
+          card.className = "result";
+
+          const title = document.createElement("div");
+          title.className = "title";
+          title.textContent = `${it.title} (${it.year})`;
+
+          const meta = document.createElement("div");
+          meta.className = "meta";
+          meta.textContent = [it.section, it.score != null ? `score ${it.score.toFixed(2)}` : null]
+            .filter(Boolean)
+            .join(" · ");
+
+          const extra = document.createElement("div");
+          extra.className = "meta";
+          if (it.extra) {
+            const keys = Object.keys(it.extra);
+            const pick = ["director", "genre", "box_office", "release_date", "cast"].filter((k) =>
+              keys.includes(k)
+            );
+            const shown = (pick.length ? pick : keys.slice(0, 2))
+              .map((k) => `${k.replaceAll("_", " ")}: ${String(it.extra[k]).slice(0, 120)}`)
+              .join(" · ");
+            extra.textContent = shown;
+          }
+
+          const links = document.createElement("div");
+          links.className = "links";
+          if (it.details_url) {
+            const a = document.createElement("a");
+            a.href = it.details_url;
+            a.target = "_blank";
+            a.rel = "noreferrer";
+            a.textContent = "details";
+            links.appendChild(a);
+          }
+          const src = document.createElement("a");
+          src.href = it.source_url;
+          src.target = "_blank";
+          src.rel = "noreferrer";
+          src.textContent = "source";
+          links.appendChild(src);
+
+          card.appendChild(title);
+          if (meta.textContent) card.appendChild(meta);
+          if (extra.textContent) card.appendChild(extra);
+          card.appendChild(links);
+          resultsEl.appendChild(card);
+        });
+      }
+
+      searchBtn.addEventListener("click", async () => {
+        const q = qEl.value.trim();
+        if (!q) return;
+        searchBtn.disabled = true;
+        resultsEl.innerHTML = '<div class="empty">Searching…</div>';
+        try {
+          const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&size=10`);
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            resultsEl.innerHTML = "";
+            const div = document.createElement("div");
+            div.className = "empty";
+            div.textContent = data.error || `Error ${r.status}`;
+            resultsEl.appendChild(div);
+            return;
+          }
+          renderResults(data.results || []);
+        } catch (e) {
+          resultsEl.innerHTML = "";
+          const div = document.createElement("div");
+          div.className = "empty";
+          div.textContent = String(e);
+          resultsEl.appendChild(div);
+        } finally {
+          searchBtn.disabled = false;
+        }
+      });
+
+      qEl.addEventListener("keyup", (e) => {
+        if (e.key === "Enter") searchBtn.click();
+      });
+    </script>
+  </body>
+</html>
+
